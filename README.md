@@ -1,4 +1,4 @@
-# TCCBRSAO245G1
+# TCC - BRSAO245 - G1
 Projeto Final do Curso AWS RE/START da Escola da Nuvem
 Turma BRSAO245
 
