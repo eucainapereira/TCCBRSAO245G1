@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Serverless Observability & Apresentação de Arquitetura</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #090a0f;
+    --card: #12151e;
+    --card-border: rgba(255, 255, 255, 0.08);
+    --accent-purple: #6c5ce7;
+    --accent-cyan: #00cec9;
+    --accent-green: #00b894;
+    --accent-amber: #fdcb6e;
+    --accent-red: #ff4757;
+    --text-main: #f1f2f6;
+    --text-muted: #a4b0be;
+    --console-bg: #090b10;
+  }
+  
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: radial-gradient(circle at 50% 0%, #151824 0%, var(--bg) 70%);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--text-main);
+    min-height: 100vh;
+    padding: 32px 20px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .container {
+    max-width: 1150px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* Header */
+  .header {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 24px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  }
+
+  .header h1 {
+    font-size: 1.6rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, var(--accent-purple), var(--accent-cyan));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .status-badges {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .badge {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 30px;
+    padding: 6px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+  }
+
+  .badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    box-shadow: 0 0 8px var(--accent-green);
+  }
+
+  /* Request Pipeline Visualizer */
+  .pipeline-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 28px 32px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  }
+
+  .section-title {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    font-weight: 700;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    align-items: center;
+    position: relative;
+  }
+
+  .pipe-node {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 16px 12px;
+    text-align: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+
+  .pipe-node .icon {
+    font-size: 1.6rem;
+    margin-bottom: 8px;
+  }
+
+  .pipe-node .name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .pipe-node .tech {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Node Active State */
+  .pipe-node.active {
+    border-color: var(--accent-cyan);
+    background: rgba(0, 206, 201, 0.1);
+    box-shadow: 0 0 20px rgba(0, 206, 201, 0.3);
+    transform: translateY(-2px);
+  }
+
+  .pipe-node.active-purple {
+    border-color: var(--accent-purple);
+    background: rgba(108, 92, 231, 0.1);
+    box-shadow: 0 0 20px rgba(108, 92, 231, 0.35);
+    transform: translateY(-2px);
+  }
+
+  /* Pipeline dentro do modal de apresentação (versão compacta) */
+  .pipeline-card-modal {
+    padding: 18px 20px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .pipeline-card-modal .section-title {
+    font-size: 0.72rem;
+    margin-bottom: 14px;
+  }
+
+  .pipeline-card-modal .pipeline {
+    grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+    gap: 8px;
+  }
+
+  .pipeline-card-modal .pipe-node {
+    padding: 12px 6px;
+    border-radius: 12px;
+  }
+
+  .pipeline-card-modal .pipe-node .icon { font-size: 1.25rem; margin-bottom: 5px; }
+  .pipeline-card-modal .pipe-node .name { font-size: 0.72rem; }
+  .pipeline-card-modal .pipe-node .tech { font-size: 0.6rem; }
+
+  /* Contador ao vivo + botão dentro do modal (versão compacta) */
+  .live-counter-modal {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  }
+
+  .live-counter-modal .counter-display { padding: 16px; }
+  .live-counter-modal .counter-subtitle { font-size: 0.7rem; }
+  .live-counter-modal .counter-number { font-size: 2.6rem; }
+  .live-counter-modal .btn-primary { font-size: 0.9rem; padding: 13px 20px; }
+
+  /* Grid Layout: Main Counter & Controls + Console */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  @media (max-width: 850px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+
+  .main-panel {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 24px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  }
+
+  .counter-display {
+    text-align: center;
+    padding: 24px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .counter-number {
+    font-size: 4rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(90deg, #ffffff, var(--accent-cyan));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .counter-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(90deg, var(--accent-purple), var(--accent-cyan));
+    border: none;
+    color: white;
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding: 16px 28px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 8px 24px rgba(108, 92, 231, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(108, 92, 231, 0.5); }
+  .btn-primary:active { transform: translateY(0) scale(0.98); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 14px 24px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .btn-secondary:hover { background: rgba(255, 255, 255, 0.09); }
+
+  .btn-presentation-big {
+    background: linear-gradient(90deg, #e84393, #6c5ce7);
+    border: none;
+    color: white;
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding: 16px 28px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 8px 24px rgba(232, 67, 147, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .btn-presentation-big:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(232, 67, 147, 0.5);
+  }
+
+  .metrics-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .metric-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+  }
+
+  .metric-value { font-size: 1.3rem; font-weight: 700; color: var(--accent-cyan); }
+  .metric-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+
+  /* Console Panel */
+  .console-panel {
+    background: var(--console-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    height: 520px;
+  }
+
+  .console-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding-bottom: 12px;
+  }
+
+  .console-title {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.85rem;
+    color: var(--accent-cyan);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-clear {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+
+  .btn-clear:hover { color: var(--text-main); }
+
+  .console-logs {
+    flex: 1;
+    overflow-y: auto;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 4px;
+  }
+
+  .console-logs::-webkit-scrollbar { width: 4px; }
+  .console-logs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+  /* Rodapé do console: Calculadora de Preços AWS */
+  .console-footer {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .btn-calculator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(253, 203, 110, 0.35);
+    background: linear-gradient(135deg, rgba(253, 203, 110, 0.16), rgba(255, 153, 0, 0.10));
+    color: var(--accent-amber);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+
+  .btn-calculator:hover {
+    transform: translateY(-2px);
+    background: linear-gradient(135deg, rgba(253, 203, 110, 0.26), rgba(255, 153, 0, 0.18));
+    box-shadow: 0 10px 24px rgba(253, 203, 110, 0.18);
+  }
+
+  .calc-services {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .calc-chip {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 5px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--card-border);
+    background: rgba(255,255,255,0.02);
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .calc-total {
+    color: var(--accent-amber);
+    border-color: rgba(253, 203, 110, 0.4);
+    font-weight: 700;
+  }
+
+  .log-line { display: flex; gap: 8px; word-break: break-all; }
+  .log-time { color: var(--text-muted); opacity: 0.6; }
+  .log-tag-apigw { color: var(--accent-purple); font-weight: 600; }
+  .log-tag-sqs { color: var(--accent-amber); font-weight: 600; }
+  .log-tag-worker { color: var(--accent-cyan); font-weight: 600; }
+  .log-tag-ddb { color: var(--accent-green); font-weight: 600; }
+  .log-tag-sys { color: #a4b0be; }
+
+  /* =========================================================
+     MODAL DE APRESENTAÇÃO (SLIDES PDF REAL + DIAGRAMA FOTO REAL)
+     ========================================================= */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(5, 7, 12, 0.92);
+    backdrop-filter: blur(14px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 16px;
+  }
+
+  .modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal-content {
+    background: #11141f;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 24px;
+    width: 100%;
+    max-width: 1380px;
+    height: 94vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Modal Header */
+  .modal-header {
+    background: #181c2b;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .modal-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .modal-title {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .slide-counter-badge {
+    background: rgba(108, 92, 231, 0.2);
+    border: 1px solid var(--accent-purple);
+    color: #a29bfe;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  .modal-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .btn-modal-action {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-main);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-modal-action:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .btn-advance {
+    background: linear-gradient(90deg, var(--accent-purple), var(--accent-cyan)) !important;
+    border: none !important;
+    color: white !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4);
+  }
+  .btn-advance:hover { transform: translateY(-1px); }
+
+  .btn-close {
+    background: rgba(255, 71, 87, 0.2);
+    border: 1px solid rgba(255, 71, 87, 0.4);
+    color: #ff6b81;
+    font-size: 1.1rem;
+    padding: 6px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .btn-close:hover { background: rgba(255, 71, 87, 0.4); color: white; }
+
+  /* Modal Body Layout (Split View: Slide Content + Architecture Diagram) */
+  .modal-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+  }
+
+  @media (max-width: 950px) {
+    .modal-body { grid-template-columns: 1fr; overflow-y: auto; }
+  }
+
+  /* Left Panel: Slide Presentation View (Exact PDF Slide Images) */
+  .slide-panel {
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    background: rgba(0, 0, 0, 0.25);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .slide-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  }
+
+  .slide-pdf-img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    object-fit: contain;
+    background: #000;
+  }
+
+  .speaker-notes-box {
+    background: rgba(253, 203, 110, 0.08);
+    border: 1px solid rgba(253, 203, 110, 0.3);
+    border-left: 4px solid var(--accent-amber);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    color: #ffeaa7;
+    line-height: 1.5;
+  }
+
+  .speaker-notes-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Right Panel: Architecture Diagram Photo + Drawing Overlay */
+  .diagram-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: #06080d;
+    overflow: hidden;
+  }
+
+  .diagram-toolbar {
+    background: #141724;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    z-index: 10;
+  }
+
+  .tool-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-tool {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-tool:hover { background: rgba(255, 255, 255, 0.12); }
+  .btn-tool.active-tool {
+    background: var(--accent-purple);
+    border-color: var(--accent-purple);
+    color: white;
+  }
+
+  .color-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+  }
+  .color-dot:hover { transform: scale(1.2); }
+  .color-dot.active-color { border-color: #ffffff; transform: scale(1.25); }
+
+  .diagram-canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    padding: 12px;
+  }
+
+  /* Exact Photo of Architecture Diagram */
+  .diagram-img-real {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+    display: block;
+  }
+
+  /* Drawing Canvas Overlay */
+  .draw-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    cursor: crosshair;
+    touch-action: none;
+    z-index: 5;
+  }
+
+  .draw-canvas.eraser-mode {
+    cursor: cell;
+  }
+
+  /* Fullscreen Mode for Architecture Diagram Photo */
+  .diagram-panel.fullscreen-diagram {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 10000;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <!-- Top Header -->
+    <header class="header">
+      <div>
+        <h1>AWS Serverless Observability</h1>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Visualizador de Arquitetura em Tempo Real</p>
+      </div>
+      <div class="status-badges">
+        <div class="badge"><span class="dot"></span> S3 Website</div>
+        <div class="badge"><span class="dot"></span> API Gateway</div>
+        <div class="badge"><span class="dot"></span> AWS SQS</div>
+        <div class="badge"><span class="dot"></span> Lambda Worker</div>
+        <div class="badge"><span class="dot"></span> DynamoDB</div>
+      </div>
+    </header>
+
+    <!-- Request Pipeline Visualizer -->
+    <div class="pipeline-card">
+      <div class="section-title">
+        <span>⚡ Caminho da Requisição em Tempo Real (Request Pipeline)</span>
+      </div>
+      <div class="pipeline">
+        <div class="pipe-node" data-node="client">
+          <div class="icon">💻</div>
+          <div class="name">Navegador</div>
+          <div class="tech">S3 Static Web</div>
+        </div>
+        <div class="pipe-node" data-node="apigw">
+          <div class="icon">🌐</div>
+          <div class="name">API Gateway</div>
+          <div class="tech">HTTP API v2</div>
+        </div>
+        <div class="pipe-node" data-node="sqs">
+          <div class="icon">📥</div>
+          <div class="name">AWS SQS</div>
+          <div class="tech">ContadorClicksQueue</div>
+        </div>
+        <div class="pipe-node" data-node="worker">
+          <div class="icon">⚡</div>
+          <div class="name">Lambda Worker</div>
+          <div class="tech">ContadorSqsWorker</div>
+        </div>
+        <div class="pipe-node" data-node="ddb">
+          <div class="icon">💾</div>
+          <div class="name">DynamoDB</div>
+          <div class="tech">ContadorAcessos</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid-2">
+      <!-- Controls & Counter -->
+      <div class="main-panel">
+        <div class="counter-display">
+          <div class="counter-subtitle">Total de Cliques Sincronizados</div>
+          <div class="counter-number" data-counter>–</div>
+        </div>
+
+        <div class="metrics-row">
+          <div class="metric-item">
+            <div class="metric-value" id="metricLatency">– ms</div>
+            <div class="metric-label">Latência API</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-value" id="metricBatch">10 msgs</div>
+            <div class="metric-label">SQS Batch Size</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn-primary" data-click-btn>
+            <span>⚡ Registrar Clique (POST /contador)</span>
+          </button>
+          <button class="btn-secondary" id="burstBtn">
+            <span>🚀 Simular Rajada (20 Requisições)</span>
+          </button>
+          <button class="btn-presentation-big" onclick="openPresentationModal()">
+            <span>📊 Apresentação</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Terminal Console -->
+      <div class="console-panel">
+        <div class="console-header">
+          <div class="console-title">🖥️ Logs do Sistema</div>
+          <button class="btn-clear" onclick="clearConsole()">Limpar Console</button>
+        </div>
+        <div class="console-logs" id="consoleLogs">
+          <!-- Logs populate dynamically -->
+        </div>
+
+        <!-- Calculadora de Preços AWS -->
+        <div class="console-footer">
+          <a class="btn-calculator"
+             href="https://calculator.aws/#/estimate?id=08baeb85a0d6061d782938c917f4640de046fb33"
+             target="_blank" rel="noopener noreferrer">
+            <span>🧮 Estimar Custos na AWS Pricing Calculator</span>
+          </a>
+          <div class="calc-services">
+            <span class="calc-chip">🌐 API Gateway</span>
+            <span class="calc-chip">📥 SQS</span>
+            <span class="calc-chip">⚡ Lambda</span>
+            <span class="calc-chip">💾 DynamoDB</span>
+            <span class="calc-chip">🖥️ S3</span>
+            <span class="calc-chip calc-total">≈ 4,30 USD/mês</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL POP-UP DE APRESENTAÇÃO (SLIDES PDF REAL + DIAGRAMA FOTO REAL)
+       ========================================================= -->
+  <div class="modal-overlay" id="presentationModal">
+    <div class="modal-content">
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-title">📊 Apresentação de Arquitetura Serverless</div>
+          <div class="slide-counter-badge" id="slideBadge">Slide 1 de 10</div>
+        </div>
+        
+        <div class="modal-controls">
+          <!-- Botão Anterior -->
+          <button class="btn-modal-action" onclick="prevSlide()" title="Slide Anterior (Seta Esquerda)">
+            <span>⬅️ Anterior</span>
+          </button>
+          
+          <!-- Botão Adiantar a Apresentação -->
+          <button class="btn-modal-action btn-advance" onclick="nextSlide()" title="Adiantar Apresentação (Seta Direita / Espaço)">
+            <span>Adiantar Apresentação ➡️</span>
+          </button>
+
+          <!-- Dropdown Seleção de Slide -->
+          <select id="slideSelect" class="btn-modal-action" onchange="goToSlide(parseInt(this.value))" style="background:#1e2436; color:#fff; border:1px solid rgba(255,255,255,0.2);">
+            <!-- Populated via JS -->
+          </select>
+
+          <!-- Botão Ampliar Diagrama (Foto Maior) -->
+          <button class="btn-modal-action" id="btnZoomDiagram" onclick="toggleDiagramFullscreen()" title="Deixar Foto Maior para Explicar">
+            <span>🔍 Expandir Foto</span>
+          </button>
+
+          <!-- Botão Fechar -->
+          <button class="btn-close" onclick="closePresentationModal()" title="Fechar Apresentação (ESC)">✖</button>
+        </div>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body">
+        <!-- Left Column: Exact PDF Slide Images -->
+        <div class="slide-panel">
+          <div class="slide-card" id="slideCardContent">
+            <!-- Slide PDF image renders dynamically here -->
+          </div>
+
+          <!-- Request Pipeline Visualizer (mesmo da página inicial) -->
+          <div class="pipeline-card pipeline-card-modal">
+            <div class="section-title">
+              <span>⚡ Caminho da Requisição em Tempo Real (Request Pipeline)</span>
+            </div>
+            <div class="pipeline">
+              <div class="pipe-node" data-node="client">
+                <div class="icon">💻</div>
+                <div class="name">Navegador</div>
+                <div class="tech">S3 Static Web</div>
+              </div>
+              <div class="pipe-node" data-node="apigw">
+                <div class="icon">🌐</div>
+                <div class="name">API Gateway</div>
+                <div class="tech">HTTP API v2</div>
+              </div>
+              <div class="pipe-node" data-node="sqs">
+                <div class="icon">📥</div>
+                <div class="name">AWS SQS</div>
+                <div class="tech">ContadorClicksQueue</div>
+              </div>
+              <div class="pipe-node" data-node="worker">
+                <div class="icon">⚡</div>
+                <div class="name">Lambda Worker</div>
+                <div class="tech">ContadorSqsWorker</div>
+              </div>
+              <div class="pipe-node" data-node="ddb">
+                <div class="icon">💾</div>
+                <div class="name">DynamoDB</div>
+                <div class="tech">ContadorAcessos</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contador ao vivo + Registrar Clique (mesmos da página inicial) -->
+          <div class="live-counter-modal">
+            <div class="counter-display">
+              <div class="counter-subtitle">Total de Cliques Sincronizados</div>
+              <div class="counter-number" data-counter>–</div>
+            </div>
+            <button class="btn-primary" data-click-btn>
+              <span>⚡ Registrar Clique (POST /contador)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Column: Architecture Diagram Photo + Interactive Drawing Canvas -->
+        <div class="diagram-panel" id="diagramPanel">
+          <!-- Canvas Toolbar for Annotations (Riscar, Apagar, Cores) -->
+          <div class="diagram-toolbar">
+            <div class="tool-group">
+              <span style="font-size:0.75rem; color:var(--text-muted); font-weight:700; margin-right:4px;">RISCAR DIAGRAMA:</span>
+              <button class="btn-tool active-tool" id="toolPen" onclick="setTool('pen')" title="Caneta para Riscar">✏️ Caneta</button>
+              <button class="btn-tool" id="toolEraser" onclick="setTool('eraser')" title="Borracha para Apagar Riscos">🧹 Apagar Riscos</button>
+              <button class="btn-tool" onclick="clearCanvasDrawings()" title="Limpar Todos os Riscos">🗑️ Limpar Tudo</button>
+            </div>
+
+            <!-- Color Palette -->
+            <div class="tool-group" id="colorPaletteGroup">
+              <div class="color-dot active-color" style="background:#ff4757;" onclick="setPenColor('#ff4757', this)" title="Vermelho Neon"></div>
+              <div class="color-dot" style="background:#ffeaa7;" onclick="setPenColor('#ffeaa7', this)" title="Amarelo Neon"></div>
+              <div class="color-dot" style="background:#00cec9;" onclick="setPenColor('#00cec9', this)" title="Cyan"></div>
+              <div class="color-dot" style="background:#2ed573;" onclick="setPenColor('#2ed573', this)" title="Verde"></div>
+              <div class="color-dot" style="background:#ffffff;" onclick="setPenColor('#ffffff', this)" title="Branco"></div>
+            </div>
+
+            <!-- Fullscreen Exit / Toggle -->
+            <button class="btn-tool" onclick="toggleDiagramFullscreen()" style="margin-left:auto;">
+              <span id="zoomBtnText">🔍 Deixar Foto Maior</span>
+            </button>
+          </div>
+
+          <!-- Exact Architecture Photo + Drawing Canvas Overlay -->
+          <div class="diagram-canvas-container" id="diagramContainer">
+            <img src="diagrama_foto.jpg" alt="Foto do Diagrama de Arquitetura AWS" class="diagram-img-real" id="diagramImg">
+            <canvas class="draw-canvas" id="annotationCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const API_URL = "https://PLACEHOLDER.execute-api.sa-east-1.amazonaws.com/contador";
+
+  // Contador e botão de clique existem em 2 lugares: página inicial e modal de apresentação.
+  const clickBtns = document.querySelectorAll("[data-click-btn]");
+  const counterEls = document.querySelectorAll("[data-counter]");
+  const burstBtn = document.getElementById("burstBtn");
+  const latencyEl = document.getElementById("metricLatency");
+  const consoleEl = document.getElementById("consoleLogs");
+
+  function setCounter(value) {
+    counterEls.forEach(el => el.textContent = value);
+  }
+
+  function setClickBtnsDisabled(disabled) {
+    clickBtns.forEach(b => b.disabled = disabled);
+  }
+
+  // Cada "nó" existe em 2 lugares: pipeline da página inicial e o do modal de apresentação.
+  const pickNodes = (name) => document.querySelectorAll(`[data-node="${name}"]`);
+
+  const nodes = {
+    client: pickNodes("client"),
+    apigw: pickNodes("apigw"),
+    sqs: pickNodes("sqs"),
+    worker: pickNodes("worker"),
+    ddb: pickNodes("ddb")
+  };
+
+  function setNodeState(nodeList, className, on) {
+    nodeList.forEach(n => n.classList.toggle(className, on));
+  }
+
+  function getTime() {
+    return new Date().toISOString().split("T")[1].slice(0, 12);
+  }
+
+  function log(tagClass, tagText, msg) {
+    const div = document.createElement("div");
+    div.className = "log-line";
+    div.innerHTML = `<span class="log-time">[${getTime()}]</span> <span class="${tagClass}">[${tagText}]</span> <span>${msg}</span>`;
+    consoleEl.appendChild(div);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+
+  function clearConsole() {
+    consoleEl.innerHTML = "";
+    log("log-tag-sys", "SYSTEM", "Console de logs inicializado.");
+  }
+
+  async function highlightNode(nodeList, duration = 400, purple = false) {
+    setNodeState(nodeList, purple ? "active-purple" : "active", true);
+    await new Promise(r => setTimeout(r, duration));
+    nodeList.forEach(n => n.classList.remove("active", "active-purple"));
+  }
+
+  async function fetchCounter(silent = false) {
+    if (!silent) log("log-tag-sys", "SYSTEM", "Consultando estado atual no DynamoDB...");
+    const start = performance.now();
+    try {
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      const elapsed = Math.round(performance.now() - start);
+      setCounter(data.contador ?? 0);
+      latencyEl.textContent = elapsed + " ms";
+      if (!silent) log("log-tag-ddb", "DYNAMODB", `Estado retornado: ${data.contador ?? 0} cliques (Latência: ${elapsed}ms)`);
+    } catch (err) {
+      if (!silent) {
+        setCounter("Erro");
+        log("log-tag-sys", "ERROR", "Falha ao consultar estado: " + err.message);
+      }
+    }
+  }
+
+  /* Enquanto a apresentação está aberta, o contador se atualiza sozinho
+     lendo o DynamoDB, sem poluir o console de logs. */
+  let livePollTimer = null;
+
+  function startLivePolling() {
+    if (livePollTimer) return;
+    livePollTimer = setInterval(() => fetchCounter(true), 5000);
+  }
+
+  function stopLivePolling() {
+    clearInterval(livePollTimer);
+    livePollTimer = null;
+  }
+
+  async function registrarClique() {
+    setClickBtnsDisabled(true);
+    const start = performance.now();
+    
+    log("log-tag-apigw", "API-GW", "Disparando POST /contador -> API Gateway -> Lambda...");
+    highlightNode(nodes.client, 200);
+    await highlightNode(nodes.apigw, 200, true);
+
+    try {
+      log("log-tag-sqs", "AWS-SQS", "Notificando auditoria SQS ContadorClicksQueue & incrementando DynamoDB...");
+      await highlightNode(nodes.sqs, 200);
+
+      const res = await fetch(API_URL, { method: "POST" });
+      const data = await res.json();
+      const elapsed = Math.round(performance.now() - start);
+      
+      log("log-tag-worker", "LAMBDA-WORKER", "Operação atômica concluída na AWS");
+      await highlightNode(nodes.worker, 200);
+
+      log("log-tag-ddb", "DYNAMODB", `Valor oficial retornado pelo DynamoDB: ${data.contador}`);
+      await highlightNode(nodes.ddb, 200);
+
+      setCounter(data.contador);
+      latencyEl.textContent = elapsed + " ms";
+    } catch (err) {
+      log("log-tag-sys", "ERROR", "Erro no processamento do clique: " + err.message);
+    } finally {
+      setClickBtnsDisabled(false);
+    }
+  }
+
+  async function simularRajada() {
+    burstBtn.disabled = true;
+    setClickBtnsDisabled(true);
+    log("log-tag-sys", "LOAD-TEST", "⚡ Iniciando rajada de 20 requisições simultâneas ao vivo...");
+    
+    setNodeState(nodes.client, "active", true);
+    setNodeState(nodes.apigw, "active-purple", true);
+    setNodeState(nodes.sqs, "active", true);
+
+    const promises = [];
+    for (let i = 1; i <= 20; i++) {
+      promises.push(fetch(API_URL, { method: "POST" }));
+    }
+
+    try {
+      const results = await Promise.all(promises);
+      log("log-tag-sqs", "AWS-SQS", "20 mensagens enviadas à fila SQS ContadorClicksQueue com sucesso!");
+      
+      setNodeState(nodes.client, "active", false);
+      setNodeState(nodes.apigw, "active-purple", false);
+      
+      log("log-tag-worker", "LAMBDA-WORKER", "Batch consumer processando lote SQS -> Incrementando DynamoDB...");
+      await highlightNode(nodes.worker, 600);
+      await highlightNode(nodes.ddb, 600);
+
+      await fetchCounter();
+      log("log-tag-sys", "LOAD-TEST", "✅ Rajada concluída com sucesso!");
+    } catch (err) {
+      log("log-tag-sys", "ERROR", "Erro na rajada: " + err.message);
+    } finally {
+      setNodeState(nodes.sqs, "active", false);
+      burstBtn.disabled = false;
+      setClickBtnsDisabled(false);
+    }
+  }
+
+  clickBtns.forEach(b => b.addEventListener("click", registrarClique));
+  burstBtn.addEventListener("click", simularRajada);
+
+  log("log-tag-sys", "SYSTEM", "Conectado ao ambiente AWS Serverless (sa-east-1).");
+  fetchCounter();
+
+  /* =========================================================
+     EXACT PDF SLIDE IMAGES (slide/01.png to slide/10.png)
+     ========================================================= */
+  const slidesData = [
+    { image: "slide/01.png", notes: "Esta apresentação detalha a arquitetura de backend serverless projetada para suportar alta carga de requisições com resiliência, tolerância a falhas e baixo custo operacional." },
+    { image: "slide/02.png", notes: "Como vemos no diagrama da foto ao lado, a arquitetura está contida em uma Conta AWS dentro de uma Região. O fluxo inicia com a requisição HTTPS do cliente." },
+    { image: "slide/03.png", notes: "Para o método POST, temos o fluxo assíncrono: API Gateway envia ao SQS, que dispara a execução da função Lambda, atualizando o DynamoDB." },
+    { image: "slide/04.png", notes: "O API Gateway atua como o guardião da aplicação. Em vez de chamar a função computacional diretamente no POST, ele deposita a mensagem no AWS SQS." },
+    { image: "slide/05.png", notes: "A AWS Lambda é acionada pelo SQS, lê o payload, incrementa o contador e executa a operação UpdateItem ou PutItem no DynamoDB." },
+    { image: "slide/06.png", notes: "A segurança é o alicerce desta arquitetura. Cada seta no diagrama que conecta dois serviços utiliza uma IAM Role específica." },
+    { image: "slide/07.png", notes: "A observabilidade é garantida pelo CloudWatch Logs. Cada execução da função Lambda registra seus logs de início, fim, erros e latência." },
+    { image: "slide/08.png", notes: "Resumindo as vantagens: esta arquitetura é extremamente econômica porque só paga pelo que usa e é virtualmente inquebrável diante de picos de tráfego." },
+    { image: "slide/09.png", notes: "Use este resumo para apresentações rápidas a executivos ou diretores em 1 minuto." },
+    { image: "slide/10.png", notes: "Conclusões finais e encerramento da apresentação de arquitetura." }
+  ];
+
+  let currentSlideIndex = 0;
+
+  function initSlideSelect() {
+    const select = document.getElementById("slideSelect");
+    select.innerHTML = "";
+    slidesData.forEach((s, idx) => {
+      const opt = document.createElement("option");
+      opt.value = idx;
+      opt.textContent = `Slide ${idx + 1} de ${slidesData.length}`;
+      select.appendChild(opt);
+    });
+  }
+  initSlideSelect();
+
+  function renderSlide(index) {
+    currentSlideIndex = index;
+    const slide = slidesData[index];
+    const badge = document.getElementById("slideBadge");
+    const card = document.getElementById("slideCardContent");
+    const select = document.getElementById("slideSelect");
+
+    badge.textContent = `Slide ${index + 1} de ${slidesData.length}`;
+    select.value = index;
+
+    card.innerHTML = `
+      <img src="${slide.image}" class="slide-pdf-img" alt="Slide ${index + 1}">
+    `;
+  }
+
+  function nextSlide() {
+    if (currentSlideIndex < slidesData.length - 1) {
+      renderSlide(currentSlideIndex + 1);
+    } else {
+      renderSlide(0);
+    }
+  }
+
+  function prevSlide() {
+    if (currentSlideIndex > 0) {
+      renderSlide(currentSlideIndex - 1);
+    } else {
+      renderSlide(slidesData.length - 1);
+    }
+  }
+
+  function goToSlide(idx) {
+    renderSlide(idx);
+  }
+
+  function openPresentationModal() {
+    const modal = document.getElementById("presentationModal");
+    modal.classList.add("open");
+    renderSlide(currentSlideIndex);
+    setTimeout(resizeCanvas, 200);
+    fetchCounter(true);
+    startLivePolling();
+  }
+
+  function closePresentationModal() {
+    const modal = document.getElementById("presentationModal");
+    modal.classList.remove("open");
+    const panel = document.getElementById("diagramPanel");
+    panel.classList.remove("fullscreen-diagram");
+    stopLivePolling();
+  }
+
+  // Keyboard navigation
+  window.addEventListener("keydown", (e) => {
+    const modal = document.getElementById("presentationModal");
+    if (!modal.classList.contains("open")) return;
+
+    if (e.key === "ArrowRight" || e.key === " ") {
+      e.preventDefault();
+      nextSlide();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      prevSlide();
+    } else if (e.key === "Escape") {
+      closePresentationModal();
+    }
+  });
+
+  /* =========================================================
+     FERRAMENTAS DE RISCAR E APAGAR NA FOTO DO DIAGRAMA
+     ========================================================= */
+  const canvas = document.getElementById("annotationCanvas");
+  const ctx = canvas.getContext("2d");
+  const container = document.getElementById("diagramContainer");
+
+  let isDrawing = false;
+  let currentTool = "pen";
+  let currentColor = "#ff4757";
+  let penWidth = 1;
+  let eraserWidth = 20;
+
+  function resizeCanvas() {
+    const rect = container.getBoundingClientRect();
+    if (canvas.width !== rect.width || canvas.height !== rect.height) {
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext("2d");
+      tempCtx.drawImage(canvas, 0, 0);
+
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      ctx.drawImage(tempCanvas, 0, 0, rect.width, rect.height);
+    }
+  }
+
+  window.addEventListener("resize", resizeCanvas);
+
+  function getCanvasCoords(e) {
+    const rect = canvas.getBoundingClientRect();
+    let clientX = e.clientX;
+    let clientY = e.clientY;
+
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    }
+
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+  }
+
+  function startDrawing(e) {
+    isDrawing = true;
+    const { x, y } = getCanvasCoords(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+
+  function draw(e) {
+    if (!isDrawing) return;
+    const { x, y } = getCanvasCoords(e);
+
+    ctx.lineTo(x, y);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (currentTool === "pen") {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = currentColor;
+      ctx.lineWidth = penWidth;
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = currentColor;
+    } else if (currentTool === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.lineWidth = eraserWidth;
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.stroke();
+  }
+
+  function stopDrawing() {
+    if (isDrawing) {
+      ctx.closePath();
+      isDrawing = false;
+    }
+  }
+
+  canvas.addEventListener("mousedown", startDrawing);
+  canvas.addEventListener("mousemove", draw);
+  canvas.addEventListener("mouseup", stopDrawing);
+  canvas.addEventListener("mouseleave", stopDrawing);
+
+  canvas.addEventListener("touchstart", (e) => { e.preventDefault(); startDrawing(e); });
+  canvas.addEventListener("touchmove", (e) => { e.preventDefault(); draw(e); });
+  canvas.addEventListener("touchend", stopDrawing);
+
+  function setTool(tool) {
+    currentTool = tool;
+    document.getElementById("toolPen").classList.toggle("active-tool", tool === "pen");
+    document.getElementById("toolEraser").classList.toggle("active-tool", tool === "eraser");
+    canvas.classList.toggle("eraser-mode", tool === "eraser");
+  }
+
+  function setPenColor(color, el) {
+    currentColor = color;
+    setTool("pen");
+    document.querySelectorAll(".color-dot").forEach(d => d.classList.remove("active-color"));
+    if (el) el.classList.add("active-color");
+  }
+
+  function clearCanvasDrawings() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function toggleDiagramFullscreen() {
+    const panel = document.getElementById("diagramPanel");
+    const btnText = document.getElementById("zoomBtnText");
+    const isFullscreen = panel.classList.toggle("fullscreen-diagram");
+
+    if (isFullscreen) {
+      btnText.textContent = "🔍 Reduzir Foto";
+    } else {
+      btnText.textContent = "🔍 Deixar Foto Maior";
+    }
+    setTimeout(resizeCanvas, 150);
+  }
+</script>
+</body>
+</html>

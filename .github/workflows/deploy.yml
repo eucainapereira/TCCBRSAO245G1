@@ -1,0 +1,242 @@
+name: "Deploy Infraestrutura AWS com Terraform"
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Ação a executar"
+        required: true
+        default: "deploy"
+        type: choice
+        options:
+          - deploy
+          - destroy
+          - cleanup-legacy
+
+env:
+  AWS_REGION: sa-east-1
+  TF_STATE_BUCKET: terraform-state-tcc-027420445627
+
+jobs:
+  # ---------------------------------------------------------------
+  # Job: Limpar recursos antigos criados via AWS CLI (manual)
+  # ---------------------------------------------------------------
+  cleanup-legacy:
+    name: "🧹 Limpar Recursos Antigos (CLI)"
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'cleanup-legacy'
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: sa-east-1
+
+    steps:
+      - name: Deletar Event Source Mappings do SQS Worker
+        run: |
+          echo "Removendo event source mappings..."
+          UUIDS=$(aws lambda list-event-source-mappings \
+            --function-name ContadorSqsWorker \
+            --query 'EventSourceMappings[].UUID' --output text 2>/dev/null || true)
+          for UUID in $UUIDS; do
+            aws lambda delete-event-source-mapping --uuid "$UUID" 2>/dev/null || true
+            echo "Deleted mapping: $UUID"
+          done
+
+      - name: Deletar API Gateway
+        run: |
+          echo "Removendo API Gateway ContadorApi..."
+          API_IDS=$(aws apigatewayv2 get-apis \
+            --query "Items[?Name=='ContadorApi'].ApiId" --output text 2>/dev/null || true)
+          for API_ID in $API_IDS; do
+            aws apigatewayv2 delete-api --api-id "$API_ID" 2>/dev/null || true
+            echo "Deleted API: $API_ID"
+          done
+
+      - name: Deletar Lambda Functions
+        run: |
+          echo "Removendo Lambda ContadorApiHandler..."
+          aws lambda delete-function --function-name ContadorApiHandler 2>/dev/null || true
+          echo "Removendo Lambda ContadorSqsWorker..."
+          aws lambda delete-function --function-name ContadorSqsWorker 2>/dev/null || true
+
+      - name: Deletar SQS Queue
+        run: |
+          echo "Removendo fila SQS ContadorClicksQueue..."
+          QUEUE_URL=$(aws sqs get-queue-url --queue-name ContadorClicksQueue \
+            --query 'QueueUrl' --output text 2>/dev/null || true)
+          if [ -n "$QUEUE_URL" ] && [ "$QUEUE_URL" != "None" ]; then
+            aws sqs delete-queue --queue-url "$QUEUE_URL" 2>/dev/null || true
+            echo "Deleted queue: $QUEUE_URL"
+          fi
+
+      - name: Deletar IAM Role e Policies
+        run: |
+          echo "Removendo políticas inline da role ContadorLambdaRole..."
+          aws iam delete-role-policy --role-name ContadorLambdaRole \
+            --policy-name ContadorPolicy 2>/dev/null || true
+
+          echo "Removendo políticas gerenciadas..."
+          aws iam detach-role-policy --role-name ContadorLambdaRole \
+            --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole 2>/dev/null || true
+
+          echo "Removendo role ContadorLambdaRole..."
+          aws iam delete-role --role-name ContadorLambdaRole 2>/dev/null || true
+
+      - name: Deletar DynamoDB Table
+        run: |
+          echo "Removendo tabela DynamoDB ContadorAcessos..."
+          aws dynamodb delete-table --table-name ContadorAcessos 2>/dev/null || true
+
+      - name: Esvaziar e Deletar S3 Bucket
+        run: |
+          echo "Esvaziando bucket S3..."
+          aws s3 rm s3://site-em-breve-cain-027420445627 --recursive 2>/dev/null || true
+          echo "Removendo bucket S3..."
+          aws s3 rb s3://site-em-breve-cain-027420445627 --force 2>/dev/null || true
+
+      - name: "✅ Limpeza concluída"
+        run: echo "Todos os recursos antigos foram removidos. Execute o deploy agora."
+
+  # ---------------------------------------------------------------
+  # Job: Deploy com Terraform
+  # ---------------------------------------------------------------
+  deploy:
+    name: "🚀 Deploy Terraform"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.action == 'deploy'
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: sa-east-1
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+          terraform_wrapper: false
+
+      - name: Criar bucket S3 para estado do Terraform
+        run: |
+          if ! aws s3api head-bucket --bucket "$TF_STATE_BUCKET" 2>/dev/null; then
+            echo "Criando bucket para estado do Terraform..."
+            aws s3api create-bucket \
+              --bucket "$TF_STATE_BUCKET" \
+              --region "$AWS_REGION" \
+              --create-bucket-configuration LocationConstraint="$AWS_REGION"
+
+            aws s3api put-bucket-versioning \
+              --bucket "$TF_STATE_BUCKET" \
+              --versioning-configuration Status=Enabled
+
+            echo "Bucket criado com versionamento habilitado."
+          else
+            echo "Bucket de estado já existe."
+          fi
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: terraform
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Obter outputs do Terraform
+        id: tf_outputs
+        working-directory: terraform
+        run: |
+          API_URL=$(terraform output -raw api_endpoint)
+          WEBSITE_URL=$(terraform output -raw website_url)
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+          echo "website_url=$WEBSITE_URL" >> "$GITHUB_OUTPUT"
+          echo "📡 API Endpoint: $API_URL"
+          echo "🌐 Website URL: $WEBSITE_URL"
+
+      - name: Atualizar API_URL no index.html e enviar para S3
+        run: |
+          API_URL="${{ steps.tf_outputs.outputs.api_url }}"
+          BUCKET="site-em-breve-cain-027420445627"
+
+          echo "Substituindo API_URL no index.html..."
+          sed -i "s|const API_URL = \".*\";|const API_URL = \"${API_URL}\";|" frontend/index.html
+
+          echo "Enviando arquivos para S3..."
+          aws s3 sync frontend/ "s3://${BUCKET}/" \
+            --delete \
+            --content-type "text/html" \
+            --exclude "*" --include "*.html"
+
+          aws s3 sync frontend/ "s3://${BUCKET}/" \
+            --exclude "*.html" \
+            --content-type "image/png" \
+            --include "slide/*.png"
+
+          aws s3 cp frontend/diagrama_foto.jpg "s3://${BUCKET}/diagrama_foto.jpg" \
+            --content-type "image/jpeg" 2>/dev/null || true
+
+          echo "✅ Frontend deployado no S3!"
+
+      - name: "📋 Resumo do Deploy"
+        run: |
+          echo "============================================="
+          echo "  ✅ DEPLOY CONCLUÍDO COM SUCESSO!"
+          echo "============================================="
+          echo ""
+          echo "📡 API Endpoint: ${{ steps.tf_outputs.outputs.api_url }}"
+          echo "🌐 Website:     ${{ steps.tf_outputs.outputs.website_url }}"
+          echo ""
+          echo "============================================="
+
+  # ---------------------------------------------------------------
+  # Job: Destruir tudo com Terraform (manual)
+  # ---------------------------------------------------------------
+  destroy:
+    name: "💥 Destroy Terraform"
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'destroy'
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: sa-east-1
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Esvaziar S3 Bucket antes do destroy
+        run: |
+          aws s3 rm s3://site-em-breve-cain-027420445627 --recursive 2>/dev/null || true
+
+      - name: Terraform Destroy
+        working-directory: terraform
+        run: terraform destroy -auto-approve
+
+      - name: "📋 Destroy concluído"
+        run: echo "Todos os recursos foram destruídos pelo Terraform."
