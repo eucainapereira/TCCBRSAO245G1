@@ -5,8 +5,8 @@ Turma BRSAO245
 ---
 
 Informações sobre o projeto:
-
-*Contador de Acessos*
+---
+*CONTADOR DE ACESSOS*
 
 Uma startup de marketing está lançando uma campanha para um novo produto.
 
