@@ -10,7 +10,7 @@ Turma BRSAO245
 
 Uma startup de marketing está lançando uma campanha para um novo produto.
 Eles criaram uma página "Em Breve" com um contador que mostra quantas pessoas já se interessaram.
-A solução é 100% Serverless — barata e escala automaticamente.
+A solução é 100% Serverless, barata e escala automaticamente.
 
 ---
 
