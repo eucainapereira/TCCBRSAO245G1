@@ -46,7 +46,7 @@ Cliente (Browser)
 
 | Serviço | Recurso | Descrição |
 |---------|---------|-----------|
-| **S3** | `site-em-breve-cain-027420445627` | Hospedagem do site estático |
+| **S3** | `site-em-breve-027420445627` | Hospedagem do site estático |
 | **API Gateway** | `ContadorApi` (HTTP API v2) | Porta de entrada HTTPS |
 | **Lambda** | `ContadorApiHandler` | Recebe requests, envia ao SQS |
 | **Lambda** | `ContadorSqsWorker` | Consome SQS, incrementa DynamoDB |

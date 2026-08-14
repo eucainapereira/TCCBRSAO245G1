@@ -25,5 +25,5 @@ variable "sqs_queue_name" {
 variable "s3_bucket_name" {
   description = "Nome do bucket S3 para o site estático"
   type        = string
-  default     = "site-em-breve-cain-027420445627"
+  default     = "site-em-breve-027420445627"
 }

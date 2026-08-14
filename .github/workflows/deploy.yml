@@ -93,9 +93,9 @@ jobs:
       - name: Esvaziar e Deletar S3 Bucket
         run: |
           echo "Esvaziando bucket S3..."
-          aws s3 rm s3://site-em-breve-cain-027420445627 --recursive 2>/dev/null || true
+          aws s3 rm s3://site-em-breve-027420445627 --recursive 2>/dev/null || true
           echo "Removendo bucket S3..."
-          aws s3 rb s3://site-em-breve-cain-027420445627 --force 2>/dev/null || true
+          aws s3 rb s3://site-em-breve-027420445627 --force 2>/dev/null || true
 
       - name: "✅ Limpeza concluída"
         run: echo "Todos os recursos antigos foram removidos. Execute o deploy agora."
@@ -149,6 +149,15 @@ jobs:
         working-directory: terraform
         run: terraform validate
 
+      - name: Esvaziar buckets S3 antigos (se existirem)
+        run: |
+          for BUCKET in site-em-breve-cain-027420445627 site-em-breve-027420445627; do
+            if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+              echo "Esvaziando $BUCKET..."
+              aws s3 rm "s3://$BUCKET" --recursive 2>/dev/null || true
+            fi
+          done
+
       - name: Terraform Plan
         working-directory: terraform
         run: terraform plan -out=tfplan
@@ -171,7 +180,7 @@ jobs:
       - name: Atualizar API_URL no index.html e enviar para S3
         run: |
           API_URL="${{ steps.tf_outputs.outputs.api_url }}"
-          BUCKET="site-em-breve-cain-027420445627"
+          BUCKET="site-em-breve-027420445627"
 
           echo "Substituindo API_URL no index.html..."
           sed -i "s|const API_URL = \".*\";|const API_URL = \"${API_URL}\";|" frontend/index.html
@@ -232,7 +241,7 @@ jobs:
 
       - name: Esvaziar S3 Bucket antes do destroy
         run: |
-          aws s3 rm s3://site-em-breve-cain-027420445627 --recursive 2>/dev/null || true
+          aws s3 rm s3://site-em-breve-027420445627 --recursive 2>/dev/null || true
 
       - name: Terraform Destroy
         working-directory: terraform
