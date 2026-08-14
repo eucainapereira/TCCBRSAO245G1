@@ -56,6 +56,27 @@ Cliente (Browser)
 
 ---
 
+## 🔒 Permissões IAM — Princípio do Menor Privilégio
+
+A role `ContadorLambdaRole` segue o princípio do **menor privilégio (Least Privilege)**: cada serviço recebe apenas as permissões estritamente necessárias para executar sua função.
+
+| Serviço | Permissão IAM (Action) | Motivo |
+|---------|------------------------|--------|
+| **SQS** | `sqs:SendMessage` | API Handler envia cliques para a fila |
+| **SQS** | `sqs:ReceiveMessage` | SQS Worker consome mensagens da fila |
+| **SQS** | `sqs:DeleteMessage` | SQS Worker remove mensagens processadas |
+| **SQS** | `sqs:GetQueueAttributes` | Lambda lê metadados da fila (batch size, etc.) |
+| **DynamoDB** | `dynamodb:PutItem` | Cria o registro inicial do contador |
+| **DynamoDB** | `dynamodb:UpdateItem` | Incrementa o valor do contador atomicamente |
+| **DynamoDB** | `dynamodb:GetItem` | Lê o valor atual do contador |
+| **CloudWatch** | `logs:CreateLogGroup` | Cria o grupo de logs da Lambda |
+| **CloudWatch** | `logs:CreateLogStream` | Cria o stream de logs por execução |
+| **CloudWatch** | `logs:PutLogEvents` | Registra os logs de cada invocação |
+
+> ⚠️ **Nenhuma permissão `*` (wildcard) é utilizada.** Cada action é restrita ao ARN específico do recurso alvo (tabela DynamoDB e fila SQS), nunca a `Resource: "*"`.
+
+---
+
 ## 🚀 CI/CD com GitHub Actions
 
 A infraestrutura é gerenciada 100% com **Terraform** e deployada automaticamente via **GitHub Actions**.
